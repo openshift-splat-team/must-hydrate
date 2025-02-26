@@ -80,9 +80,22 @@ service-ca                                 4.19.0-0.nightly-2025-02-14-215306   
 storage                                    4.19.0-0.nightly-2025-02-14-215306   True        False         False      7d12h
 ```
 
+### Using with openshift-tests
+
+In order to perform testing with openshift-tests(i.e. you need to add a test) you will need to obtain a client that does not create a new project. For example:
+
+```sh
+	//oc := exutil.NewCLI("cluster-client-cert")
+	oc := exutil.NewCLIWithoutNamespace("cluster-client-cert")
+```
+The reason being that oc provisions resources which require a controller to create service accounts, credentials, etc.. In theory, you could provision the necessary controllers to handle of this.
+However, for merely testing a new test before running it against a cluster this workaround should be sufficient.
+
 ## Troubleshooting
 
 ### Too many file handles
+
+Bump up the maximum number of file handles. How and what to set this to will vary based on your specific OS/environment.
 ```sh
 sudo sysctl -w fs.inotify.max_user_watches=2099999999
 sudo sysctl -w fs.inotify.max_user_instances=2099999999
