@@ -3,7 +3,6 @@ package controller
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -34,6 +33,11 @@ import (
 var (
 	metadataKeysToDrop = []string{"creationTimestamp", "managedFields", "uid", "resourceVersion", "generation"}
 	kindPriority       = []schema.GroupVersionKind{
+		{
+			Group:   "apiextensions.k8s.io",
+			Version: "v1",
+			Kind:    "CustomResourceDefinition",
+		},
 		{
 			Group:   "",
 			Version: "v1",
@@ -145,7 +149,7 @@ type HydratorReconciler struct {
 	gvkCache map[string]*GvkCacheItem
 }
 
-func (a *HydratorReconciler) getYamlsInPath() []string {
+func (a *HydratorReconciler) loadResources() error {
 	var yamlFiles []string
 	rootDir := a.RootPath
 	a.gvkCache = make(map[string]*GvkCacheItem)
@@ -164,26 +168,11 @@ func (a *HydratorReconciler) getYamlsInPath() []string {
 		return nil
 	})
 	if err != nil {
-		fmt.Printf("Error walking the path %q: %v\n", rootDir, err)
-		return nil
+		a.log.Error(err, "error walking the path", "rootDir", rootDir)
+		return fmt.Errorf("error walking the path. %v", err)
 	}
 
-	return yamlFiles
-}
-
-func (a *HydratorReconciler) getCrdPaths() []string {
-	var filtered []string
-
-	yamls := a.getYamlsInPath()
-
-	for _, s := range yamls {
-		if strings.Contains(s, "/customresourcedefinitions/") {
-			filtered = append(filtered, s)
-		}
-	}
-
-	return filtered
-
+	return nil
 }
 
 func (a *HydratorReconciler) cleanupMetadata(root map[string]any) {
@@ -274,7 +263,7 @@ func (a *HydratorReconciler) prepareAndCacheResource(path string) error {
 		}
 
 		for _, item := range items {
-			item, ok := item.(map[string]interface{})
+			item, ok := item.(map[string]any)
 
 			if !ok {
 				a.log.Info("skipping an item due to type assertion failure")
@@ -360,23 +349,18 @@ func (a *HydratorReconciler) Initialize(ctx context.Context) error {
 		a.RootPath = "./data"
 	}
 
-	crds := a.getCrdPaths()
+	err = a.loadResources()
 
-	if len(crds) == 0 {
-		err := errors.New("no CRDs were found. this is likely the result of a rootDir not pointing to a must-gather or the must-gather is incomplete")
+	if err != nil {
+		err = fmt.Errorf("unable to load resources %v", err)
 		a.log.Error(err, err.Error())
-	} else {
-		a.log.Info("found CRDs to install", "crds", len(crds))
+		return err
 	}
 	api := envtest.APIServer{}
-	//api.Configure().Append("service-cluster-ip-range=192.0.0.0/24")
-	//api.Configure().Set("secure-port", "16443")
-	//api.Configure().Set("bind-address", "0.0.0.0")
 	api.Configure().Set("service-cluster-ip-range", "192.0.0.0/24")
-	//api.Port = "16443"
 	a.testEnv = &envtest.Environment{
 		// Provide paths to your CRD definitions if needed.
-		CRDDirectoryPaths:        crds,
+		CRDDirectoryPaths:        []string{},
 		AttachControlPlaneOutput: true,
 		ControlPlane: envtest.ControlPlane{
 			APIServer: &api,
