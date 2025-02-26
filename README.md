@@ -5,6 +5,10 @@ a must-gather for the purposes of investigation or unit test development. For nu
 and spinning up a new cluster can be expensive and time consuming. Much like a sponge absorbing water, this project is designed to pull resources in 
 to an empty control plane, much like the CVO.
 
+## Type Support
+
+Types from github.com/openshift/api and all CRDs from the must-gather are installed in to the local control plane. 
+
 ## Building
 
 must-hydrate can be built as a container:
