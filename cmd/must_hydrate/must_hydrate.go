@@ -6,6 +6,8 @@ import (
 	"os"
 
 	"github.com/openshift-splat-team/must-hydrate/pkg/controller"
+	oainstall "github.com/openshift/api"
+
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 
@@ -48,6 +50,9 @@ func main() {
 	}
 
 	hydrator.Client = mgr.GetClient()
+	parentScheme := mgr.GetScheme()
+	_ = oainstall.Install(parentScheme)
+	_ = oainstall.InstallKube(parentScheme)
 
 	if err := mgr.Start(signals.SetupSignalHandler()); err != nil {
 		log.Error(err, "could not start manager")

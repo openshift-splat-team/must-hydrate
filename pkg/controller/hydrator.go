@@ -3,6 +3,7 @@ package controller
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -76,9 +77,19 @@ var (
 			Kind:    "Service",
 		},
 		{
+			Group:   "batch",
+			Version: "v1",
+			Kind:    "Job",
+		},
+		{
 			Group:   "build.openshift.io",
 			Version: "v1",
 			Kind:    "BuildConfig",
+		},
+		{
+			Group:   "build.openshift.io",
+			Version: "v1",
+			Kind:    "Build",
 		},
 		{
 			Group:   "cns.vmware.com",
@@ -99,6 +110,11 @@ var (
 			Group:   "operators.coreos.com",
 			Version: "v1",
 			Kind:    "OperatorGroup",
+		},
+		{
+			Group:   "apiregistration.k8s.io",
+			Version: "v1",
+			Kind:    "APIService",
 		},
 		{
 			Group:   "route.openshift.io",
@@ -283,9 +299,9 @@ func (a *HydratorReconciler) prepareAndCacheResource(path string) error {
 }
 
 func (a *HydratorReconciler) applyResources(applyGvks ...schema.GroupVersionKind) error {
-	var unapplied []*unstructured.Unstructured
-
+	unappliedResources := false
 	for key, gvkCacheItem := range a.gvkCache {
+		var unapplied []*unstructured.Unstructured
 		if len(applyGvks) > 0 {
 			var apply bool
 			for _, applyGvk := range applyGvks {
@@ -304,6 +320,8 @@ func (a *HydratorReconciler) applyResources(applyGvks ...schema.GroupVersionKind
 			resourceIface, err := util.New(a.restConfig, gvk, resourceInstance.GetNamespace())
 			if err != nil {
 				a.log.Error(err, "unable to create resource interface", "gvk", util.GetGvkKey(gvk), "name", resourceInstance.GetName())
+				unappliedResources = true
+				unapplied = gvkCacheItem.instances
 				break
 			}
 
@@ -315,6 +333,7 @@ func (a *HydratorReconciler) applyResources(applyGvks ...schema.GroupVersionKind
 				if err != nil {
 					a.log.Error(err, "unable to create resource", "gvk", util.GetGvkKey(gvk), "name", resourceInstance.GetName())
 					unapplied = append(unapplied, resourceInstance)
+					unappliedResources = true
 					continue
 				}
 			}
@@ -325,6 +344,7 @@ func (a *HydratorReconciler) applyResources(applyGvks ...schema.GroupVersionKind
 				if err != nil {
 					a.log.Error(err, "unable to udpate status for resource", "gvk", util.GetGvkKey(gvk), "name", resourceInstance.GetName())
 					unapplied = append(unapplied, existing)
+					unappliedResources = true
 					continue
 				}
 			}
@@ -333,6 +353,9 @@ func (a *HydratorReconciler) applyResources(applyGvks ...schema.GroupVersionKind
 		a.gvkCache[key] = gvkCacheItem
 	}
 
+	if unappliedResources {
+		return errors.New("there are remaining resources to be applied")
+	}
 	return nil
 }
 
@@ -357,9 +380,8 @@ func (a *HydratorReconciler) Initialize(ctx context.Context) error {
 		return err
 	}
 	api := envtest.APIServer{}
-	api.Configure().Set("service-cluster-ip-range", "192.0.0.0/24")
+	api.Configure().Set("service-cluster-ip-range", "172.30.0.0/14")
 	a.testEnv = &envtest.Environment{
-		// Provide paths to your CRD definitions if needed.
 		CRDDirectoryPaths:        []string{},
 		AttachControlPlaneOutput: true,
 		ControlPlane: envtest.ControlPlane{
@@ -412,12 +434,13 @@ func (a *HydratorReconciler) Reconcile() {
 		if err != nil {
 			a.log.Error(err, "unable to apply all resources")
 		} else {
-			a.log.Info("applied all resources. exiting reconciliation")
-			return
+			a.log.Info("no errors found in reconciliation")
 		}
 		seconds := 1 << backoff
 		a.log.Info("backing off", "seconds", seconds)
 		time.Sleep(time.Duration(seconds) * time.Second)
-		backoff++
+		if backoff < 5 {
+			backoff++
+		}
 	}
 }
