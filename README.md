@@ -5,7 +5,7 @@ a must-gather for the purposes of investigation or unit test development. For nu
 and spinning up a new cluster can be expensive and time consuming. Much like a sponge absorbing water, this project is designed to pull resources in 
 to an empty control plane, much like the CVO.
 
-(![Alt Text](./docs/demo.gif))
+![demo.gif](./docs/demo.gif)
 
 ## Type Support
 
@@ -46,7 +46,7 @@ modify this to not require host networking.
 ### Accessing the API
 
 ```sh
-$ export KUBECONFIG=envtest.kubeconfig
+$ export KUBECONFIG=./data-dir/envtest.kubeconfig
 $ oc get co
 NAME                                       VERSION                              AVAILABLE   PROGRESSING   DEGRADED   SINCE
 authentication                             4.19.0-0.nightly-2025-02-14-215306   True        False         False      7d11h
