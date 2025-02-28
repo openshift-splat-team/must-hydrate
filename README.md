@@ -5,7 +5,7 @@ a must-gather for the purposes of investigation or unit test development. For nu
 and spinning up a new cluster can be expensive and time consuming. Much like a sponge absorbing water, this project is designed to pull resources in 
 to an empty control plane, much like the CVO.
 
-[![asciicast](https://asciinema.org/a/YhH0TGegoJX9ZQqaJ1YQfY3JI.svg)](https://asciinema.org/a/YhH0TGegoJX9ZQqaJ1YQfY3JI)
+(![Alt Text](./docs/demo.gif))
 
 ## Type Support
 

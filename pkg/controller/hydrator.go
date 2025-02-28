@@ -207,14 +207,6 @@ func (a *HydratorReconciler) loadResources() error {
 	return nil
 }
 
-// patchNodesWithLocalhost `oc logs` uses the node hostname to determine
-// which kubelet to query. we dont have real nodes or real kubetes, so
-// we need to patch the nodes with localhost so that oc logs knows where the
-// kubelet endpoint is.
-func (a *HydratorReconciler) patchNodesWithLocalhost() {
-
-}
-
 func (a *HydratorReconciler) cleanupMetadata(root map[string]any) {
 	if metadata, ok := root["metadata"].(map[string]any); ok {
 		if len(metadata) != 0 {
@@ -469,6 +461,42 @@ func (a *HydratorReconciler) setupLogAccess() error {
 	return nil
 }
 
+func (a *HydratorReconciler) getServiceNetwork() string {
+	serviceNetwork := "172.30.0.0/16"
+
+	node := schema.GroupVersionKind{
+		Group:   "config.openshift.io",
+		Version: "v1",
+		Kind:    "Network",
+	}
+
+	instances, err := a.getResourceFromCache(node)
+	if err != nil {
+		return serviceNetwork
+	}
+
+	for _, instance := range instances {
+		obj := instance.Object
+
+		status, exists := obj["status"].(map[string]any)
+		if !exists {
+			return serviceNetwork
+		}
+
+		serviceNetworks, exists := status["serviceNetwork"].([]any)
+		if !exists {
+			return serviceNetwork
+		}
+
+		if len(serviceNetworks) == 0 {
+			return serviceNetwork
+		}
+		serviceNetwork = serviceNetworks[0].(string)
+	}
+
+	return serviceNetwork
+}
+
 func (a *HydratorReconciler) Initialize(ctx context.Context) error {
 	var err error
 
@@ -499,7 +527,7 @@ func (a *HydratorReconciler) Initialize(ctx context.Context) error {
 	}
 
 	api := envtest.APIServer{}
-	api.Configure().Set("service-cluster-ip-range", "172.30.0.0/14")
+	api.Configure().Set("service-cluster-ip-range", a.getServiceNetwork())
 	a.testEnv = &envtest.Environment{
 		CRDDirectoryPaths:        []string{},
 		AttachControlPlaneOutput: true,
