@@ -99,7 +99,7 @@ However, for many use cases this workaround should be sufficient.  If you need c
 
 ## Log File Support
 
-Pod logs are generally retrieved via the kubelet daemon port. Since there is no kubelet localhost:10250 is opened and listening for log requests. In turn, the Node resources are updated to set their hostname to localhost.  `oc` uses the hostname to determine which kubelet is associated with the logs to be gatherered. Setting the hostnames to localhost forces them all requests through must-hydrate.
+Pod logs are generally retrieved via the kubelet daemon port. Since there is no kubelet, `localhost:10250` is opened and listening for log requests. In turn, the Node resources are updated to set their hostname to localhost.  `oc` uses the hostname to determine which kubelet is associated with the logs to be gatherered. Setting the hostnames to `localhost` forces them all requests through must-hydrate.
 Logs can be disabled by passing `--disable-logs=true`.
 
 ## Troubleshooting
