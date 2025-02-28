@@ -10,5 +10,5 @@ RUN wget https://github.com/kubernetes-sigs/controller-runtime/releases/download
 RUN chmod +x ./setup-envtest-linux-amd64
 RUN ./setup-envtest-linux-amd64 use --bin-dir envtest
 ENV KUBEBUILDER_ASSETS=/go/src/github.com/openshift-splat-team/must-hydrate/envtest/k8s/1.32.0-linux-amd64
-ENV KUBECONFIG=/go/src/github.com/openshift-splat-team/must-hydrate/envtest.kubeconfig
+ENV KUBECONFIG=/data/envtest.kubeconfig
 CMD ./must_hydrate
