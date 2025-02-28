@@ -94,12 +94,12 @@ In order to perform testing with openshift-tests(i.e. you need to add a test) yo
 	//oc := exutil.NewCLI("cluster-client-cert")
 	oc := exutil.NewCLIWithoutNamespace("cluster-client-cert")
 ```
-The reason being that oc provisions resources which require a controller to create service accounts, credentials, etc.. In theory, you could provision the necessary controllers to handle of this.
-However, for merely testing a new test before running it against a cluster this workaround should be sufficient.
+The reason being that oc provisions resources which require a controller to create service accounts, credentials, etc.. In theory, you could provision the necessary controllers to handle this.
+However, for many use cases this workaround should be sufficient.  If you need controllers, install a cluster.
 
 ## Log File Support
 
-Pod logs are generally retrieved via the kubelet daemon port. Since there is no kubelet localhost:10250 is opened and listening for log requests. In turn, the Node resources are updated set their hostname to localhost.  `oc` uses the hostname to determine which kubelet is associated with the logs to be gatherered.
+Pod logs are generally retrieved via the kubelet daemon port. Since there is no kubelet localhost:10250 is opened and listening for log requests. In turn, the Node resources are updated to set their hostname to localhost.  `oc` uses the hostname to determine which kubelet is associated with the logs to be gatherered. Setting the hostnames to localhost forces them all requests through must-hydrate.
 Logs can be disabled by passing `--disable-logs=true`.
 
 ## Troubleshooting
