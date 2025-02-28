@@ -35,7 +35,7 @@ make build
 
 ### Starting must_hydrate
 ```sh
-podman run -v $(pwd)/data:/data:z ---network host must_hydrate
+podman run -v $(pwd)/data:/data:z --network host must_hydrate
 ```
 
 The api server is started on a random port at this time and as such must run on the host network. It is possible, however, to 
@@ -94,6 +94,11 @@ In order to perform testing with openshift-tests(i.e. you need to add a test) yo
 ```
 The reason being that oc provisions resources which require a controller to create service accounts, credentials, etc.. In theory, you could provision the necessary controllers to handle of this.
 However, for merely testing a new test before running it against a cluster this workaround should be sufficient.
+
+## Log File Support
+
+Pod logs are generally retrieved via the kubelet daemon port. Since there is no kubelet localhost:10250 is opened and listening for log requests. In turn, the Node resources are updated set their hostname to localhost.  `oc` uses the hostname to determine which kubelet is associated with the logs to be gatherered.
+Logs can be disabled by passing `--disable-logs=true`.
 
 ## Troubleshooting
 

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,7 +18,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8syaml "k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/dynamic"
@@ -161,8 +161,10 @@ type HydratorReconciler struct {
 	clientSet     *kubernetes.Clientset
 	context       context.Context
 	restConfig    *rest.Config
+	LogDisabled   bool
 
-	gvkCache map[string]*GvkCacheItem
+	gvkCache  map[string]*GvkCacheItem
+	podLogMap map[string]string
 }
 
 func (a *HydratorReconciler) loadResources() error {
@@ -180,6 +182,20 @@ func (a *HydratorReconciler) loadResources() error {
 				return err
 			}
 			yamlFiles = append(yamlFiles, path)
+		} else if info.Name() == "current.log" {
+			parts := strings.Split(path, "/namespaces/")
+			if len(parts) < 2 {
+				return nil
+			}
+			parts = strings.Split(parts[1], "/")
+			if len(parts) == 7 {
+				namespace := parts[0]
+				podName := parts[2]
+				container := parts[3]
+
+				url := fmt.Sprintf("/containerLogs/%s/%s/%s", namespace, podName, container)
+				a.podLogMap[url] = path
+			}
 		}
 		return nil
 	})
@@ -189,6 +205,14 @@ func (a *HydratorReconciler) loadResources() error {
 	}
 
 	return nil
+}
+
+// patchNodesWithLocalhost `oc logs` uses the node hostname to determine
+// which kubelet to query. we dont have real nodes or real kubetes, so
+// we need to patch the nodes with localhost so that oc logs knows where the
+// kubelet endpoint is.
+func (a *HydratorReconciler) patchNodesWithLocalhost() {
+
 }
 
 func (a *HydratorReconciler) cleanupMetadata(root map[string]any) {
@@ -243,6 +267,13 @@ func (a *HydratorReconciler) cacheResources(resources []unstructured.Unstructure
 		cachedResource.instances = append(cachedResource.instances, &resource)
 		a.gvkCache[key] = cachedResource
 	}
+}
+
+func (a *HydratorReconciler) GetLogPathFromUrl(url *url.URL) (string, error) {
+	if path, exists := a.podLogMap[url.Path]; exists {
+		return path, nil
+	}
+	return "", fmt.Errorf("unable to find log path from URL: %s", url.Path)
 }
 
 func (a *HydratorReconciler) prepareAndCacheResource(path string) error {
@@ -329,7 +360,7 @@ func (a *HydratorReconciler) applyResources(applyGvks ...schema.GroupVersionKind
 			if apierrors.IsNotFound(err) {
 				klog.V(2).Infof("%s %s/%s not found, creating", resourceInstance.GetKind(), resourceInstance.GetNamespace(), resourceInstance.GetName())
 				a.cleanupMetadata(resourceInstance.Object)
-				existing, err = resourceIface.Create(a.context, resourceInstance, v1.CreateOptions{})
+				existing, err = resourceIface.Create(a.context, resourceInstance, metav1.CreateOptions{})
 				if err != nil {
 					a.log.Error(err, "unable to create resource", "gvk", util.GetGvkKey(gvk), "name", resourceInstance.GetName())
 					unapplied = append(unapplied, resourceInstance)
@@ -340,7 +371,7 @@ func (a *HydratorReconciler) applyResources(applyGvks ...schema.GroupVersionKind
 
 			if status, ok := resourceInstance.Object["status"]; ok {
 				existing.Object["status"] = status
-				_, err = resourceIface.UpdateStatus(a.context, existing, v1.UpdateOptions{})
+				_, err = resourceIface.UpdateStatus(a.context, existing, metav1.UpdateOptions{})
 				if err != nil {
 					a.log.Error(err, "unable to udpate status for resource", "gvk", util.GetGvkKey(gvk), "name", resourceInstance.GetName())
 					unapplied = append(unapplied, existing)
@@ -359,11 +390,90 @@ func (a *HydratorReconciler) applyResources(applyGvks ...schema.GroupVersionKind
 	return nil
 }
 
+// getResourceFromCache retrieves resources from the cache based on the provided GroupVersionKind and name.
+// If no name is provided, all resources of the given GVK are returned.
+func (a *HydratorReconciler) getResourceFromCache(gvk schema.GroupVersionKind, name ...string) ([]*unstructured.Unstructured, error) {
+	var item *GvkCacheItem
+	var exists bool
+	var resources []*unstructured.Unstructured
+
+	key := util.GetGvkKey(gvk)
+	if item, exists = a.gvkCache[key]; !exists {
+		return nil, fmt.Errorf("unable to find gvk %s in cache", key)
+	}
+
+	if len(name) == 0 {
+		resources = item.instances
+	}
+
+	for _, n := range name {
+		for _, instance := range item.instances {
+			if instance.GetName() == n {
+				resources = append(resources, instance)
+				break
+			}
+		}
+	}
+	return resources, nil
+}
+
+// setupLogAccess sets up the log access for the HydratorReconciler.
+func (a *HydratorReconciler) setupLogAccess() error {
+	node := schema.GroupVersionKind{
+		Group:   "",
+		Version: "v1",
+		Kind:    "Node",
+	}
+
+	instances, err := a.getResourceFromCache(node)
+	if err != nil {
+		return errors.New("unable to find node resource. oc logs will be broken")
+	}
+
+	var nodeList []*unstructured.Unstructured
+
+	for _, instance := range instances {
+		obj := instance.Object
+
+		status, exists := obj["status"].(map[string]any)
+		if !exists {
+			return fmt.Errorf("unable to get status from node resource. oc logs will be broken.")
+		}
+
+		addresses, exists := status["addresses"].([]any)
+		if !exists {
+			return fmt.Errorf("unable to get status from node resource. oc logs will be broken.")
+		}
+
+		addressList := []map[string]any{
+			{
+				"address": "localhost",
+				"type":    "Hostname",
+			},
+		}
+		for _, address := range addresses {
+			addr := address.(map[string]any)
+			if addr["type"] == "Hostname" {
+				continue
+			}
+			addressList = append(addressList, addr)
+		}
+		status["addresses"] = addressList
+		obj["status"] = status
+		nodeList = append(nodeList, &unstructured.Unstructured{
+			Object: obj,
+		})
+	}
+	a.gvkCache[util.GetGvkKey(node)].instances = nodeList
+
+	return nil
+}
+
 func (a *HydratorReconciler) Initialize(ctx context.Context) error {
 	var err error
 
 	a.context = ctx
-
+	a.podLogMap = make(map[string]string)
 	logf.SetLogger(zap.New())
 
 	a.log = logf.Log.WithName("HydratorReconciler")
@@ -373,12 +483,21 @@ func (a *HydratorReconciler) Initialize(ctx context.Context) error {
 	}
 
 	err = a.loadResources()
-
 	if err != nil {
 		err = fmt.Errorf("unable to load resources %v", err)
 		a.log.Error(err, err.Error())
 		return err
 	}
+
+	if !a.LogDisabled {
+		err = a.setupLogAccess()
+		if err != nil {
+			err = fmt.Errorf("unable to setup log access %v", err)
+			a.log.Error(err, err.Error())
+			return err
+		}
+	}
+
 	api := envtest.APIServer{}
 	api.Configure().Set("service-cluster-ip-range", "172.30.0.0/14")
 	a.testEnv = &envtest.Environment{
@@ -405,7 +524,7 @@ func (a *HydratorReconciler) Initialize(ctx context.Context) error {
 		return fmt.Errorf("failed to create the k8s client set. %v", err)
 	}
 
-	err = util.WriteKubeconfig(cfg)
+	err = util.WriteKubeconfig(cfg, a.RootPath)
 	if err != nil {
 		return fmt.Errorf("unable to write kubeconfig: %v", err)
 	}
