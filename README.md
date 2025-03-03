@@ -2,9 +2,7 @@
 
 must-hydrate builds an envtest, or possibly any lightweight, control plane from a must-gather. The goal is to provide a fast way of consuming
 a must-gather for the purposes of investigation or unit test development. For numerous activites, access to a 'live' cluster isn't always necessary
-and spinning up a new cluster can be expensive and time consuming. Much like a sponge absorbing water, this project is designed to pull resources in 
-to an empty control plane, much like the CVO.
-
+and spinning up a new cluster can be expensive and time consuming. 
 ![demo.gif](./docs/demo.gif)
 
 ## Type Support
