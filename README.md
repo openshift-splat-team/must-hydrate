@@ -3,6 +3,7 @@
 must-hydrate builds an envtest, or possibly any lightweight, control plane from a must-gather. The goal is to provide a fast way of consuming
 a must-gather for the purposes of investigation or unit test development. For numerous activites, access to a 'live' cluster isn't always necessary
 and spinning up a new cluster can be expensive and time consuming. 
+
 ![demo.gif](./docs/demo.gif)
 
 ## Type Support
@@ -33,13 +34,52 @@ make build
 - The kubeconfig to be used to interrogate the must-gather will be written to /data/envtest.kubeconfig if running in a container or the working
   directory if not running in a container.
 
-### Starting must_hydrate
+### Starting must-hydrate
 ```sh
 podman run -v $(pwd)/data:/data:z --network host must_hydrate
 ```
 
 The api server is started on a random port at this time and as such must run on the host network. It is possible, however, to 
 modify this to not require host networking.
+
+### Adding must-hydrate to `.bashrc`
+
+As a convenience, a function can be added to `~/.bashrc` to setup and call podman for you:
+
+```sh
+function must-hydrate () {
+    if [ -z $1 ]; then
+        echo "must provide path to must-gather"
+        return
+    fi
+
+    archive_path=$1
+    mount_path=$archive_path
+    if [[ $archive_path =~ \.tar(\.gz)?$ ]]; then
+        mount_path=$(mktemp -d)
+        echo "file is a .tar or .tar.gz archive. mounting $archive_path with archivemount to $tmp_dir"
+        archivemount -o nosave $archive_path $mount_path
+        ls -lt $mount_path        
+    else
+        echo "file is not a .tar or .tar.gz archive"
+    fi
+    echo starting must_hydrate with context $archive_path
+
+    podman run -v $mount_path:/data:z --network host must_hydrate
+}
+```
+must-hydrate can then be called with something similar to:
+
+```sh
+must-hydrate /home/rvanderp/Downloads/must-gather\(2\)
+```
+
+If `archivemount` is used, `tar` and `tar.gz` files can be used without pre-extracting the archive.  To install `archivemount`:
+
+Fedora:
+```sh
+dnf install -y archivemount
+```
 
 ### Accessing the API
 
