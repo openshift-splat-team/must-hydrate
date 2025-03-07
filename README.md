@@ -81,6 +81,11 @@ Fedora:
 dnf install -y archivemount
 ```
 
+Then:
+```sh
+must-hydrate /home/rvanderp/Downloads/must-gather.tar.gz
+```
+
 ### Accessing the API
 
 ```sh
