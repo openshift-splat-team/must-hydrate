@@ -74,7 +74,7 @@ must-hydrate can then be called with something similar to:
 must-hydrate /home/rvanderp/Downloads/must-gather\(2\)
 ```
 
-If `archivemount` is used, `tar` and `tar.gz` files can be used without pre-extracting the archive.  To install `archivemount`:
+If `archivemount` is installed, `tar` and `tar.gz` files can be used without pre-extracting the archive.  To install `archivemount`:
 
 Fedora:
 ```sh
